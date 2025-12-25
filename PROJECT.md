@@ -18,6 +18,7 @@ This must work well on e-ink devices (Boox): minimal UI animations, stable backg
 - Milestone 2: complete (sentence chunking with back/forward and play-all)
 - Milestone 3: complete (SAF import, persisted URI, filename display)
 - Milestone 4: in progress (EPUB zip scan works; OPF spine parsing still falling back)
+- Milestone 6: complete (foreground service playback for background TTS)
 
 ---
 
