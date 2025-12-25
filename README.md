@@ -29,6 +29,14 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - Notification playback controls (Read/Stop/Next/Prev)
 - Persist TTS rate and voice settings
 - Resume screen polish (show saved position clearly)
+- Multi-book library with last 5 recent books
+- Resume cards per book (title, chapter, sentence)
+- Bookmark/save position per book
+- Chapter search and filter
+- Sleep timer (15/30/60 minutes)
+- Skip by paragraph or sentence count
+- "Now Reading" header with chapter title
+- Export/import reading state (backup)
 
 ## Build
 ```bash
