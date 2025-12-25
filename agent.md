@@ -69,6 +69,7 @@ At the end of each session step, you state:
 - What we implemented
 - How to test it
 - What the next step will be
+- If Git is initialized, commit and push to GitHub after confirming with me
 
 ## First Task When We Begin
 1. Create Android Studio project: Compose, minimum SDK you recommend.
