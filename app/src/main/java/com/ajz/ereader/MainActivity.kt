@@ -37,6 +37,7 @@ import androidx.compose.material3.Slider
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
+import androidx.core.text.HtmlCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -352,14 +353,7 @@ class MainActivity : ComponentActivity(),
                 val entryName = entries[index]
                 val bytes = readZipEntry(uriString, entryName) ?: return@withContext ""
                 val html = bytes.toString(Charsets.UTF_8)
-                val cleaned = html
-                    .replace(Regex("(?is)<head.*?>.*?</head>"), " ")
-                    .replace(Regex("(?is)<style.*?>.*?</style>"), " ")
-                    .replace(Regex("(?is)<script.*?>.*?</script>"), " ")
-                    .replace(Regex("<[^>]+>"), " ")
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-                cleaned
+                extractTextFromHtml(html)
             }
             chapterText = if (text.isBlank()) "No readable text found" else text
             currentChapterIndex = index
@@ -451,6 +445,22 @@ class MainActivity : ComponentActivity(),
             }
         }
         return null
+    }
+
+    private fun extractTextFromHtml(html: String): String {
+        val withoutHead = html
+            .replace(Regex("(?is)<head.*?>.*?</head>"), " ")
+            .replace(Regex("(?is)<style.*?>.*?</style>"), " ")
+            .replace(Regex("(?is)<script.*?>.*?</script>"), " ")
+        val spanned = HtmlCompat.fromHtml(
+            withoutHead,
+            HtmlCompat.FROM_HTML_MODE_LEGACY
+        )
+        val text = spanned.toString()
+        val noFootnotes = text.replace(Regex("\\[(\\d{1,3})\\]"), "")
+        return noFootnotes
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     private fun parseTocTitles(

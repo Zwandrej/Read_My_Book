@@ -1,6 +1,6 @@
 # Read My Book
 
-Version: 0.1.0
+Version: 0.1.1
 
 Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 
@@ -12,6 +12,9 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - Resume position (chapter + sentence index)
 
 ## Version History
+### 0.1.1
+- Improve HTML to text cleanup for chapter content
+
 ### 0.1.0
 - Initial app flow with start screen and chapter list
 - EPUB TOC parsing for human-readable chapter titles
