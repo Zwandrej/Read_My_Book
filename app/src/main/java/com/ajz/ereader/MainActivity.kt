@@ -1,8 +1,6 @@
 package com.ajz.ereader
 
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -35,9 +33,15 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 import androidx.compose.material3.Slider
 import android.content.Intent
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
+import android.os.IBinder
 import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
 import android.content.Context
 import androidx.core.text.HtmlCompat
+import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -68,10 +72,7 @@ private data class OpfData(
     val ncxPath: String?
 )
 
-class MainActivity : ComponentActivity(),
-    TextToSpeech.OnInitListener {
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+class MainActivity : ComponentActivity() {
     private var selectedUri: String? by mutableStateOf(null)
     private var selectedName: String? by mutableStateOf(null)
     private var chapterTitles: List<String> by
@@ -84,6 +85,26 @@ class MainActivity : ComponentActivity(),
     private var resumeSentenceIndex: Int by mutableStateOf(0)
     private var currentChapterIndex: Int by mutableStateOf(0)
     private var currentSentenceIndex: Int by mutableStateOf(0)
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private var ttsService: com.ajz.ereader.tts.TtsService? = null
+    private var isServiceBound = false
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as? com.ajz.ereader.tts.TtsService.TtsBinder
+            ttsService = binder?.getService()
+            isServiceBound = ttsService != null
+            ttsService?.setSentenceIndexListener { index ->
+                runOnUiThread { currentSentenceIndex = index }
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            ttsService?.setSentenceIndexListener(null)
+            ttsService = null
+            isServiceBound = false
+        }
+    }
 
     private val pickEpub = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -110,24 +131,6 @@ class MainActivity : ComponentActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        tts = TextToSpeech(this, this)
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                val index = parseSentenceIndex(utteranceId)
-                if (index >= 0) {
-                    runOnUiThread { currentSentenceIndex = index }
-                }
-            }
-
-            override fun onDone(utteranceId: String?) {
-                // No-op for now.
-            }
-
-            override fun onError(utteranceId: String?) {
-                // No-op for now.
-            }
-        })
-
         lifecycleScope.launch {
             val prefs = dataStore.data.first()
             selectedUri = prefs[PrefKeys.epubUri]
@@ -148,18 +151,22 @@ class MainActivity : ComponentActivity(),
                 Surface {
                     TtsScreen(
                         onPlay = { text, rate, index ->
-                            tts?.setSpeechRate(rate)
-                            speak(text, index)
+                            startTtsService()
+                            ttsService?.playAll(listOf(text), rate, index)
                         },
                         onPlayAll = { sentences, rate, startIndex ->
-                            speakAll(sentences, rate, startIndex)
+                            startTtsService()
+                            ttsService?.playAll(sentences, rate, startIndex)
                         },
                         currentSentenceIndex = currentSentenceIndex,
                         onSentenceIndexChange = {
                             currentSentenceIndex = it
                             savePlaybackState(currentChapterIndex, it)
                         },
-                        onPause = { stopSpeaking() },
+                        onPause = {
+                            ttsService?.stop()
+                            stopTtsService()
+                        },
                         onImportEpub = {
                             pickEpub.launch(arrayOf("application/epub+zip"))
                         },
@@ -190,7 +197,8 @@ class MainActivity : ComponentActivity(),
                             }
                         },
                         onBackToStart = {
-                            stopSpeaking()
+                            ttsService?.stop()
+                            stopTtsService()
                             chapterText = ""
                         },
                     )
@@ -199,41 +207,26 @@ class MainActivity : ComponentActivity(),
         }
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.US
-            ttsReady = true
+    private fun startTtsService() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermission.launch(
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                )
+                return
+            }
         }
+        val intent = Intent(this, com.ajz.ereader.tts.TtsService::class.java)
+        ContextCompat.startForegroundService(this, intent)
     }
 
-    private fun speak(text: String, index: Int) {
-        if (!ttsReady) return
-        if (text.isBlank()) return
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null,
-            "sentence_$index")
-    }
-
-    private fun speakAll(sentences: List<String>, rate: Float, startIndex: Int) {
-        if (!ttsReady) return
-        tts?.setSpeechRate(rate)
-        tts?.stop()
-
-        var first = true
-        val clampedStart = startIndex.coerceIn(0, sentences.lastIndex)
-        for (i in clampedStart until sentences.size) {
-            val sentence = sentences[i]
-            if (sentence.isBlank()) continue
-            val mode = if (first) TextToSpeech.QUEUE_FLUSH else
-                TextToSpeech.QUEUE_ADD
-            tts?.speak(sentence, mode, null,
-                "sentence_$i")
-            first = false
-        }
-    }
-
-
-    private fun stopSpeaking() {
-        tts?.stop()
+    private fun stopTtsService() {
+        val intent = Intent(this, com.ajz.ereader.tts.TtsService::class.java)
+        stopService(intent)
     }
 
     private fun getDisplayName(uriString: String): String? {
@@ -596,12 +589,6 @@ class MainActivity : ComponentActivity(),
         return if (baseDir.isEmpty()) cleaned else "$baseDir/$cleaned"
     }
 
-    private fun parseSentenceIndex(utteranceId: String?): Int {
-        if (utteranceId == null) return -1
-        if (!utteranceId.startsWith("sentence_")) return -1
-        return utteranceId.removePrefix("sentence_").toIntOrNull() ?: -1
-    }
-
     private fun savePlaybackState(chapterIndex: Int, sentenceIndex: Int) {
         lifecycleScope.launch {
             dataStore.edit { prefs ->
@@ -611,8 +598,22 @@ class MainActivity : ComponentActivity(),
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        val intent = Intent(this, com.ajz.ereader.tts.TtsService::class.java)
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    override fun onStop() {
+        if (isServiceBound) {
+            unbindService(serviceConnection)
+            isServiceBound = false
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
-        tts?.shutdown()
+        ttsService?.setSentenceIndexListener(null)
         super.onDestroy()
     }
 }
