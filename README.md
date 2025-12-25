@@ -1,3 +1,4 @@
+<img width="1024" height="1024" alt="13FC07D9-FC1A-422E-8C8B-3B5F90C950E6" src="https://github.com/user-attachments/assets/2053cb97-6972-43f9-97bd-808703033fbd" />
 # Read My Book
 
 Version: 0.2.0
