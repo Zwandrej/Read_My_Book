@@ -1,7 +1,7 @@
 <img width="1024" height="1024" alt="13FC07D9-FC1A-422E-8C8B-3B5F90C950E6" src="https://github.com/user-attachments/assets/2053cb97-6972-43f9-97bd-808703033fbd" />
 # Read My Book
 
-Version: 0.2.0
+Version: 0.2.1
 
 Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 
@@ -13,6 +13,11 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - Resume position (chapter + sentence index)
 
 ## Version History
+### 0.2.1
+- Add Settings page for TTS rate/pitch (persisted)
+- Add About page with version + GitHub link
+- UI cleanups on start and reading screens
+
 ### 0.2.0
 - Move TTS playback into a foreground service for background reading
 - Add notification permissions for Android 13+
@@ -28,7 +33,7 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 ## Planned Next
 - Better TTS voices (voice picker, offline voice checks)
 - Notification playback controls (Read/Stop/Next/Prev)
-- Persist TTS rate and voice settings
+- Persist TTS voice selection
 - Resume screen polish (show saved position clearly)
 - Multi-book library with last 5 recent books
 - Resume cards per book (title, chapter, sentence)

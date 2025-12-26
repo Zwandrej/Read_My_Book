@@ -88,10 +88,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    fun playAll(sentences: List<String>, rate: Float, startIndex: Int) {
+    fun playAll(sentences: List<String>, rate: Float, pitch: Float, startIndex: Int) {
         if (!ttsReady) return
         if (sentences.isEmpty()) return
         tts?.setSpeechRate(rate)
+        tts?.setPitch(pitch)
         tts?.stop()
 
         var first = true

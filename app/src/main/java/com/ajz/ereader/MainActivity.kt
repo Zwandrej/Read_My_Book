@@ -44,6 +44,7 @@ import androidx.core.text.HtmlCompat
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
@@ -56,6 +57,7 @@ import kotlinx.coroutines.withContext
 import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayOutputStream
+import android.net.Uri
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -64,6 +66,8 @@ private object PrefKeys {
     val epubName = stringPreferencesKey("epub_name")
     val playbackChapterIndex = intPreferencesKey("playback_chapter_index")
     val playbackSentenceIndex = intPreferencesKey("playback_sentence_index")
+    val ttsRate = floatPreferencesKey("tts_rate")
+    val ttsPitch = floatPreferencesKey("tts_pitch")
 }
 
 private data class OpfData(
@@ -85,6 +89,10 @@ class MainActivity : ComponentActivity() {
     private var resumeSentenceIndex: Int by mutableStateOf(0)
     private var currentChapterIndex: Int by mutableStateOf(0)
     private var currentSentenceIndex: Int by mutableStateOf(0)
+    private var ttsRate: Float by mutableStateOf(1.0f)
+    private var ttsPitch: Float by mutableStateOf(1.0f)
+    private var appVersionName: String by mutableStateOf("unknown")
+    private var appVersionCode: Long by mutableStateOf(0L)
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private var ttsService: com.ajz.ereader.tts.TtsService? = null
@@ -130,11 +138,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loadAppVersion()
 
         lifecycleScope.launch {
             val prefs = dataStore.data.first()
             selectedUri = prefs[PrefKeys.epubUri]
             selectedName = prefs[PrefKeys.epubName]
+            ttsRate = prefs[PrefKeys.ttsRate] ?: 1.0f
+            ttsPitch = prefs[PrefKeys.ttsPitch] ?: 1.0f
             if (selectedUri != null) {
                 resumeChapterIndex = prefs[PrefKeys.playbackChapterIndex] ?: 0
                 resumeSentenceIndex = prefs[PrefKeys.playbackSentenceIndex] ?: 0
@@ -150,13 +161,13 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface {
                     TtsScreen(
-                        onPlay = { text, rate, index ->
+                        onPlay = { text, rate, pitch, index ->
                             startTtsService()
-                            ttsService?.playAll(listOf(text), rate, index)
+                            ttsService?.playAll(listOf(text), rate, pitch, index)
                         },
-                        onPlayAll = { sentences, rate, startIndex ->
+                        onPlayAll = { sentences, rate, pitch, startIndex ->
                             startTtsService()
-                            ttsService?.playAll(sentences, rate, startIndex)
+                            ttsService?.playAll(sentences, rate, pitch, startIndex)
                         },
                         currentSentenceIndex = currentSentenceIndex,
                         onSentenceIndexChange = {
@@ -201,6 +212,29 @@ class MainActivity : ComponentActivity() {
                             stopTtsService()
                             chapterText = ""
                         },
+                        rate = ttsRate,
+                        pitch = ttsPitch,
+                        onRateChange = { newRate ->
+                            ttsRate = newRate
+                            saveTtsSettings(newRate, ttsPitch)
+                        },
+                        onPitchChange = { newPitch ->
+                            ttsPitch = newPitch
+                            saveTtsSettings(ttsRate, newPitch)
+                        },
+                        onOpenTtsSettings = {
+                            val intent = Intent("com.android.settings.TTS_SETTINGS")
+                            startActivity(intent)
+                        },
+                        onOpenGithub = {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/ajzwitter/Ereader")
+                            )
+                            startActivity(intent)
+                        },
+                        appVersionName = appVersionName,
+                        appVersionCode = appVersionCode,
                     )
                 }
             }
@@ -227,6 +261,25 @@ class MainActivity : ComponentActivity() {
     private fun stopTtsService() {
         val intent = Intent(this, com.ajz.ereader.tts.TtsService::class.java)
         stopService(intent)
+    }
+
+    private fun loadAppVersion() {
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(0)
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0)
+        }
+        appVersionName = info.versionName ?: "unknown"
+        appVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
     }
 
     private fun getDisplayName(uriString: String): String? {
@@ -307,6 +360,15 @@ class MainActivity : ComponentActivity() {
                 0
             }
             currentSentenceIndex = resumeSentenceIndex
+        }
+    }
+
+    private fun saveTtsSettings(rate: Float, pitch: Float) {
+        lifecycleScope.launch {
+            dataStore.edit { prefs ->
+                prefs[PrefKeys.ttsRate] = rate
+                prefs[PrefKeys.ttsPitch] = pitch
+            }
         }
     }
 
@@ -621,8 +683,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun TtsScreen(
-    onPlay: (String, Float, Int) -> Unit,
-    onPlayAll: (List<String>, Float, Int) -> Unit,
+    onPlay: (String, Float, Float, Int) -> Unit,
+    onPlayAll: (List<String>, Float, Float, Int) -> Unit,
     currentSentenceIndex: Int,
     onSentenceIndexChange: (Int) -> Unit,
     onPause: () -> Unit,
@@ -638,13 +700,24 @@ fun TtsScreen(
     resumeSentenceIndex: Int,
     onResume: () -> Unit,
     onBackToStart: () -> Unit,
-    chapterSource: String
+    rate: Float,
+    pitch: Float,
+    onRateChange: (Float) -> Unit,
+    onPitchChange: (Float) -> Unit,
+    chapterSource: String,
+    onOpenTtsSettings: () -> Unit,
+    onOpenGithub: () -> Unit,
+    appVersionName: String,
+    appVersionCode: Long
 ) {
     var text by remember(chapterText) {
         mutableStateOf(if (chapterText.isBlank()) "No readable text found" else chapterText)
     }
-    var rate by remember { mutableStateOf(1.0f) }
+    var pendingRate by remember(rate) { mutableStateOf(rate) }
+    var pendingPitch by remember(pitch) { mutableStateOf(pitch) }
     var showChapterList by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     val showStartScreen = chapterText.isBlank()
 
     fun splitSentences(input: String): List<String> {
@@ -673,7 +746,73 @@ fun TtsScreen(
     val canGoBack = currentSentenceIndex > 0
     val canGoForward = currentSentenceIndex < sentences.size - 1
 
-            if (showChapterList) {
+            if (showAbout) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "About",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                    Text(
+                        text = "Version $appVersionName (code $appVersionCode)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedButton(onClick = onOpenGithub) {
+                        Text("Open GitHub")
+                    }
+                    Text(
+                        text = "Version History",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "1.0 - Initial milestones (TTS, import, parsing, service)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "1.1 - Settings + pitch, UI cleanup",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(onClick = { showAbout = false }) {
+                        Text("Back")
+                    }
+                }
+            } else if (showSettings) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                    Text(text = "Rate: ${"%.1f".format(rate)}")
+                    Slider(
+                        value = pendingRate,
+                        onValueChange = { pendingRate = it },
+                        onValueChangeFinished = { onRateChange(pendingRate) },
+                        valueRange = 0.5f..2.0f
+                    )
+                    Text(text = "Pitch: ${"%.1f".format(pitch)}")
+                    Slider(
+                        value = pendingPitch,
+                        onValueChange = { pendingPitch = it },
+                        onValueChangeFinished = { onPitchChange(pendingPitch) },
+                        valueRange = 0.5f..2.0f
+                    )
+                    OutlinedButton(onClick = onOpenTtsSettings) {
+                        Text("Open TTS Settings")
+                    }
+                    OutlinedButton(onClick = { showSettings = false }) {
+                        Text("Back")
+                    }
+                }
+            } else if (showChapterList) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -728,7 +867,7 @@ fun TtsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "Ereader",
+                        text = "Read-My-Book",
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Button(onClick = onImportEpub) {
@@ -755,6 +894,12 @@ fun TtsScreen(
                     OutlinedButton(onClick = { showChapterList = true }) {
                         Text("Chapter List")
                     }
+                    OutlinedButton(onClick = { showSettings = true }) {
+                        Text("Settings")
+                    }
+                    OutlinedButton(onClick = { showAbout = true }) {
+                        Text("About")
+                    }
                 }
             } else {
                 Column(
@@ -764,14 +909,11 @@ fun TtsScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-        Text(
-            text = "Text to Speech",
-            style =
-                MaterialTheme.typography.headlineMedium
-        )
-                OutlinedButton(onClick = onBackToStart) {
-                    Text("Back to Start")
-                }
+                val pageTitle = selectedName?.takeIf { it.isNotBlank() } ?: "Text to Speech"
+                Text(
+                    text = pageTitle,
+                    style = MaterialTheme.typography.headlineMedium
+                )
                 OutlinedButton(onClick = { showChapterList = true }) {
                     Text("Chapter List")
                 }
@@ -880,14 +1022,6 @@ fun TtsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Text to speak (preview)") }
                 )
-        Text(text = "Rate: ${"%.1f".format(rate)}")
-
-        Slider(
-            value = rate,
-            onValueChange = { rate = it },
-            valueRange = 0.5f..2.0f
-                )
-
                 Row(horizontalArrangement =
                     Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
@@ -901,7 +1035,7 @@ fun TtsScreen(
                         Text("Stop")
                     }
 
-                    Button(onClick = { onPlayAll(sentences, rate, currentSentenceIndex) }) {
+                    Button(onClick = { onPlayAll(sentences, rate, pitch, currentSentenceIndex) }) {
                         Text("Read")
                     }
                     OutlinedButton(
@@ -915,6 +1049,12 @@ fun TtsScreen(
                     OutlinedButton(onClick = onPause) {
                         Text("Pause")
                     }
+                }
+                OutlinedButton(onClick = onBackToStart) {
+                    Text("Back to Start")
+                }
+                OutlinedButton(onClick = { showSettings = true }) {
+                    Text("Settings")
                 }
 
             }
