@@ -46,7 +46,7 @@ android {
 
 val copyReadmeToAssets by tasks.registering(Copy::class) {
     from(rootProject.file("README.md"))
-    into(layout.projectDirectory.dir("app/src/main/assets"))
+    into(layout.projectDirectory.dir("src/main/assets"))
     rename { "README.md" }
 }
 
