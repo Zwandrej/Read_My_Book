@@ -20,6 +20,13 @@ This must work well on e-ink devices (Boox): minimal UI animations, stable backg
 - Milestone 4: in progress (EPUB zip scan works; OPF spine parsing still falling back)
 - Milestone 6: complete (foreground service playback for background TTS)
 
+## Open Issues
+- App icon still shows default Android icon on device
+  - Tried: replace mipmap PNGs, add adaptive icon XMLs in `mipmap-anydpi-v26`,
+    switch adaptive layers to PNG foreground + transparent background,
+    clean/rebuild, uninstall/reinstall
+  - Next: inspect APK with `aapt`/`apkanalyzer` and verify launcher cache on device
+
 ---
 
 ## Non-goals (for MVP)
