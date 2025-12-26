@@ -1,7 +1,7 @@
 <img width="1024" height="1024" alt="13FC07D9-FC1A-422E-8C8B-3B5F90C950E6" src="https://github.com/user-attachments/assets/2053cb97-6972-43f9-97bd-808703033fbd" />
 # Read My Book
 
-Version: 0.2.1
+Version: 0.3.0
 
 Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 
@@ -13,6 +13,10 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - Resume position (chapter + sentence index)
 
 ## Version History
+### 0.3.0
+- Display book cover on start and reading screens
+- Improve TTS chunking to reduce long pauses
+
 ### 0.2.1
 - Add Settings page for TTS rate/pitch (persisted)
 - Add About page with version + GitHub link

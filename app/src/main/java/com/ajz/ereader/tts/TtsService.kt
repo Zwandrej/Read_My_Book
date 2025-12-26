@@ -100,9 +100,19 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         for (i in clampedStart until sentences.size) {
             val sentence = sentences[i]
             if (sentence.isBlank()) continue
-            val mode = if (first) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            tts?.speak(sentence, mode, null, "sentence_$i")
-            first = false
+            val chunks = splitLongSentence(sentence)
+            for (chunkIndex in chunks.indices) {
+                val chunk = chunks[chunkIndex]
+                if (chunk.isBlank()) continue
+                val mode = if (first) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+                val utteranceId = if (chunkIndex == 0) {
+                    "sentence_$i"
+                } else {
+                    "sentence_${i}_part_$chunkIndex"
+                }
+                tts?.speak(chunk, mode, null, utteranceId)
+                first = false
+            }
         }
     }
 
@@ -122,7 +132,28 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private fun parseSentenceIndex(utteranceId: String?): Int {
         if (utteranceId == null) return -1
         if (!utteranceId.startsWith("sentence_")) return -1
-        return utteranceId.removePrefix("sentence_").toIntOrNull() ?: -1
+        val trimmed = utteranceId.removePrefix("sentence_")
+        val digits = trimmed.takeWhile { it.isDigit() }
+        return digits.toIntOrNull() ?: -1
+    }
+
+    private fun splitLongSentence(sentence: String, maxLength: Int = 400): List<String> {
+        if (sentence.length <= maxLength) return listOf(sentence)
+        val words = sentence.split(Regex("\\s+"))
+        val parts = mutableListOf<String>()
+        val current = StringBuilder()
+        for (word in words) {
+            if (current.isNotEmpty() &&
+                current.length + 1 + word.length > maxLength
+            ) {
+                parts.add(current.toString())
+                current.clear()
+            }
+            if (current.isNotEmpty()) current.append(' ')
+            current.append(word)
+        }
+        if (current.isNotEmpty()) parts.add(current.toString())
+        return parts
     }
 
     inner class TtsBinder : Binder() {

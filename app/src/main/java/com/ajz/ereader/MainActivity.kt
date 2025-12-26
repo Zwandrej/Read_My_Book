@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import androidx.compose.material3.Slider
@@ -42,6 +46,8 @@ import android.os.Build
 import android.content.Context
 import androidx.core.text.HtmlCompat
 import androidx.core.content.ContextCompat
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -73,7 +79,8 @@ private object PrefKeys {
 private data class OpfData(
     val spineFiles: List<String>,
     val navPath: String?,
-    val ncxPath: String?
+    val ncxPath: String?,
+    val coverPath: String?
 )
 
 class MainActivity : ComponentActivity() {
@@ -94,6 +101,7 @@ class MainActivity : ComponentActivity() {
     private var appVersionName: String by mutableStateOf("unknown")
     private var appVersionCode: Long by mutableStateOf(0L)
     private var aboutVersionHistory: List<String> by mutableStateOf(emptyList())
+    private var coverBitmap: Bitmap? by mutableStateOf(null)
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private var ttsService: com.ajz.ereader.tts.TtsService? = null
@@ -244,6 +252,7 @@ class MainActivity : ComponentActivity() {
                         appVersionName = appVersionName,
                         appVersionCode = appVersionCode,
                         aboutVersionHistory = aboutVersionHistory,
+                        coverBitmap = coverBitmap,
                     )
                 }
             }
@@ -350,15 +359,20 @@ class MainActivity : ComponentActivity() {
         resumeSentenceIndex: Int
     ) {
         lifecycleScope.launch {
-            val (files, source, titles) = withContext(Dispatchers.IO) {
+            val (result, cover) = withContext(Dispatchers.IO) {
                 val opfPath = findOpfPath(uriString)
                 val opfData = if (opfPath != null) {
                     parseOpfData(uriString, opfPath)
                 } else {
-                    OpfData(emptyList(), null, null)
+                    OpfData(emptyList(), null, null, null)
                 }
 
                 if (opfData.spineFiles.isNotEmpty()) {
+                    val coverBitmap = opfData.coverPath?.let { path ->
+                        readZipEntry(uriString, path)
+                    }?.let { bytes ->
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
                     val tocMap = parseTocTitles(
                         uriString,
                         opfData.navPath,
@@ -367,7 +381,7 @@ class MainActivity : ComponentActivity() {
                     val mappedTitles = opfData.spineFiles.map { path ->
                         tocMap[path] ?: path.substringAfterLast('/')
                     }
-                    Triple(opfData.spineFiles, "spine", mappedTitles)
+                    Triple(opfData.spineFiles, "spine", mappedTitles) to coverBitmap
                 } else {
                     val uri = android.net.Uri.parse(uriString)
                     val fallback =
@@ -399,14 +413,15 @@ class MainActivity : ComponentActivity() {
                         fallback,
                         "fallback",
                         fallback.map { it.substringAfterLast('/') }
-                    )
+                    ) to null
                 }
             }
-            chapterFiles = files
-            chapterTitles = titles
-            chapterSource = source
-            currentChapterIndex = if (files.isNotEmpty()) {
-                resumeChapterIndex.coerceIn(0, files.lastIndex)
+            chapterFiles = result.first
+            chapterTitles = result.third
+            chapterSource = result.second
+            coverBitmap = cover
+            currentChapterIndex = if (result.first.isNotEmpty()) {
+                resumeChapterIndex.coerceIn(0, result.first.lastIndex)
             } else {
                 0
             }
@@ -489,6 +504,7 @@ class MainActivity : ComponentActivity() {
         val bytes = readZipEntry(uriString, normalizedPath) ?: return OpfData(
             emptyList(),
             null,
+            null,
             null
         )
         val parser = Xml.newPullParser()
@@ -498,6 +514,7 @@ class MainActivity : ComponentActivity() {
         val properties = mutableMapOf<String, String>()
         val mediaTypes = mutableMapOf<String, String>()
         val spine = mutableListOf<String>()
+        var coverId: String? = null
 
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
@@ -520,6 +537,12 @@ class MainActivity : ComponentActivity() {
                             spine.add(idref)
                         }
                     }
+                    "meta" -> {
+                        val name = getAttr(parser, "name")
+                        if (name == "cover") {
+                            coverId = getAttr(parser, "content")
+                        }
+                    }
                 }
             }
             event = parser.next()
@@ -540,7 +563,16 @@ class MainActivity : ComponentActivity() {
         val ncxPath = ncxId?.let { id ->
             manifest[id]?.let { href -> resolvePath(baseDir, href) }
         }
-        return OpfData(spineFiles, navPath, ncxPath)
+        val coverItemId = coverId
+            ?: properties.entries.firstOrNull {
+                it.value.contains("cover-image")
+            }?.key
+        val coverPath = coverItemId?.let { id ->
+            manifest[id]?.let { href -> resolvePath(baseDir, href) }
+        } ?: manifest.entries.firstOrNull { entry ->
+            mediaTypes[entry.key]?.startsWith("image/") == true
+        }?.value?.let { href -> resolvePath(baseDir, href) }
+        return OpfData(spineFiles, navPath, ncxPath, coverPath)
     }
 
     private fun getAttr(parser: XmlPullParser, name: String):
@@ -760,7 +792,8 @@ fun TtsScreen(
     onOpenGithub: () -> Unit,
     appVersionName: String,
     appVersionCode: Long,
-    aboutVersionHistory: List<String>
+    aboutVersionHistory: List<String>,
+    coverBitmap: Bitmap?
 ) {
     var text by remember(chapterText) {
         mutableStateOf(if (chapterText.isBlank()) "No readable text found" else chapterText)
@@ -943,6 +976,16 @@ fun TtsScreen(
                         text = "Read-My-Book",
                         style = MaterialTheme.typography.headlineMedium
                     )
+                    coverBitmap?.let { bitmap ->
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Book cover",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                     Button(onClick = onImportEpub) {
                         Text("Import EPUB")
                     }
@@ -987,6 +1030,17 @@ fun TtsScreen(
                     text = pageTitle,
                     style = MaterialTheme.typography.headlineMedium
                 )
+                coverBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Book cover",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .padding(bottom = 8.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
                 OutlinedButton(onClick = { showChapterList = true }) {
                     Text("Chapter List")
                 }
