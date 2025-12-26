@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Copy
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -40,6 +42,16 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+val copyReadmeToAssets by tasks.registering(Copy::class) {
+    from(rootProject.file("README.md"))
+    into(layout.projectDirectory.dir("app/src/main/assets"))
+    rename { "README.md" }
+}
+
+tasks.named("preBuild") {
+    dependsOn(copyReadmeToAssets)
 }
 
 dependencies {

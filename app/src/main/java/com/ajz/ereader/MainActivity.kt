@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
     private var ttsPitch: Float by mutableStateOf(1.0f)
     private var appVersionName: String by mutableStateOf("unknown")
     private var appVersionCode: Long by mutableStateOf(0L)
+    private var aboutVersionHistory: List<String> by mutableStateOf(emptyList())
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private var ttsService: com.ajz.ereader.tts.TtsService? = null
@@ -154,6 +155,13 @@ class MainActivity : ComponentActivity() {
                     resumeChapterIndex,
                     resumeSentenceIndex
                 )
+            }
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val history = loadVersionHistoryFromAssets()
+            withContext(Dispatchers.Main) {
+                aboutVersionHistory = history
             }
         }
 
@@ -235,6 +243,7 @@ class MainActivity : ComponentActivity() {
                         },
                         appVersionName = appVersionName,
                         appVersionCode = appVersionCode,
+                        aboutVersionHistory = aboutVersionHistory,
                     )
                 }
             }
@@ -280,6 +289,48 @@ class MainActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             info.versionCode.toLong()
         }
+    }
+
+    private fun loadVersionHistoryFromAssets(): List<String> {
+        val readme = try {
+            assets.open("README.md").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            return emptyList()
+        }
+
+        val lines = readme.lines()
+        val startIndex = lines.indexOfFirst { it.trim() == "## Version History" }
+        if (startIndex == -1) return emptyList()
+
+        val entries = mutableListOf<String>()
+        var currentVersion: String? = null
+        var bulletParts = mutableListOf<String>()
+
+        fun flushEntry() {
+            val version = currentVersion ?: return
+            val detail = bulletParts.joinToString("; ")
+            val entry = if (detail.isBlank()) version else "$version - $detail"
+            entries.add(entry)
+        }
+
+        var i = startIndex + 1
+        while (i < lines.size) {
+            val line = lines[i].trim()
+            if (line.startsWith("## ")) break
+            when {
+                line.startsWith("### ") -> {
+                    flushEntry()
+                    currentVersion = line.removePrefix("### ").trim()
+                    bulletParts = mutableListOf()
+                }
+                line.startsWith("- ") -> {
+                    bulletParts.add(line.removePrefix("- ").trim())
+                }
+            }
+            i++
+        }
+        flushEntry()
+        return entries
     }
 
     private fun getDisplayName(uriString: String): String? {
@@ -708,7 +759,8 @@ fun TtsScreen(
     onOpenTtsSettings: () -> Unit,
     onOpenGithub: () -> Unit,
     appVersionName: String,
-    appVersionCode: Long
+    appVersionCode: Long,
+    aboutVersionHistory: List<String>
 ) {
     var text by remember(chapterText) {
         mutableStateOf(if (chapterText.isBlank()) "No readable text found" else chapterText)
@@ -761,6 +813,22 @@ fun TtsScreen(
                         text = "Version $appVersionName (code $appVersionCode)",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Text(
+                        text = "This app is an open source project developed by Andrej Zwitter.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "License: Apache 2.0 (credit required; reference the original project).",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "Local-only, privacy-preserving.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "Last updated: 2025-12-26",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     OutlinedButton(onClick = onOpenGithub) {
                         Text("Open GitHub")
                     }
@@ -768,14 +836,19 @@ fun TtsScreen(
                         text = "Version History",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Text(
-                        text = "1.0 - Initial milestones (TTS, import, parsing, service)",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "1.1 - Settings + pitch, UI cleanup",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    if (aboutVersionHistory.isEmpty()) {
+                        Text(
+                            text = "Version history unavailable.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        for (entry in aboutVersionHistory) {
+                            Text(
+                                text = entry,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     OutlinedButton(onClick = { showAbout = false }) {
                         Text("Back")
                     }
