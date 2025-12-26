@@ -181,3 +181,4 @@ app/
 - Speed + pitch settings
 - Sleep timer
 - “Skip by time” approximation (requires timing model)
+- Display book cover art in the UI
