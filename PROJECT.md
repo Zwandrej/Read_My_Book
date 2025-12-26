@@ -19,6 +19,7 @@ This must work well on e-ink devices (Boox): minimal UI animations, stable backg
 - Milestone 3: complete (SAF import, persisted URI, filename display)
 - Milestone 4: in progress (EPUB zip scan works; OPF spine parsing still falling back)
 - Milestone 6: complete (foreground service playback for background TTS)
+- Book cover display: complete (shown on start and reading screens)
 
 ## Open Issues
 - App icon still shows default Android icon on device
@@ -26,6 +27,9 @@ This must work well on e-ink devices (Boox): minimal UI animations, stable backg
     switch adaptive layers to PNG foreground + transparent background,
     clean/rebuild, uninstall/reinstall
   - Next: inspect APK with `aapt`/`apkanalyzer` and verify launcher cache on device
+- Long pause before some sentences (older devices)
+  - Tried: split long sentences into smaller chunks
+  - Next: enqueue speech on-demand (after `onDone`) and tune chunk size
 
 ---
 
@@ -188,4 +192,3 @@ app/
 - Speed + pitch settings
 - Sleep timer
 - “Skip by time” approximation (requires timing model)
-- Display book cover art in the UI
