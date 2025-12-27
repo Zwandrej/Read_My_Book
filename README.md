@@ -1,4 +1,4 @@
-<img width="1024" height="1024" alt="13FC07D9-FC1A-422E-8C8B-3B5F90C950E6" src="https://github.com/user-attachments/assets/2053cb97-6972-43f9-97bd-808703033fbd" />
+<img width="1536" height="1024" alt="Logo and Text - Vertical white blue" src="https://github.com/user-attachments/assets/8f76a359-1132-477b-9d65-67c2491238c9" />
 # Read My Book
 
 Version: 0.4
