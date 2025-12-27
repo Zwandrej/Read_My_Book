@@ -16,8 +16,8 @@ android {
         applicationId = "com.ajz.ereader"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

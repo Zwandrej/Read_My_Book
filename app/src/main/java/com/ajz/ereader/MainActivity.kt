@@ -64,12 +64,16 @@ import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayOutputStream
 import android.net.Uri
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.text.PDFTextStripper
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 private object PrefKeys {
     val epubUri = stringPreferencesKey("epub_uri")
     val epubName = stringPreferencesKey("epub_name")
+    val documentType = stringPreferencesKey("document_type")
     val playbackChapterIndex = intPreferencesKey("playback_chapter_index")
     val playbackSentenceIndex = intPreferencesKey("playback_sentence_index")
     val ttsRate = floatPreferencesKey("tts_rate")
@@ -86,6 +90,7 @@ private data class OpfData(
 class MainActivity : ComponentActivity() {
     private var selectedUri: String? by mutableStateOf(null)
     private var selectedName: String? by mutableStateOf(null)
+    private var selectedType: String? by mutableStateOf(null)
     private var chapterTitles: List<String> by
     mutableStateOf(emptyList())
     private var chapterSource: String by mutableStateOf("unknown")
@@ -123,7 +128,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val pickEpub = registerForActivityResult(
+    private val pickDocument = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
@@ -132,14 +137,21 @@ class MainActivity : ComponentActivity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
             val uriString = uri.toString()
+            val detectedType = detectDocumentType(uri)
             selectedUri = uriString
             selectedName = getDisplayName(uriString)
-            loadEpubChapters(uriString, 0, 0)
+            selectedType = detectedType
+            if (detectedType == "pdf") {
+                loadPdfDocument(uriString, 0)
+            } else {
+                loadEpubChapters(uriString, 0, 0)
+            }
 
             lifecycleScope.launch {
                 dataStore.edit { prefs ->
                     prefs[PrefKeys.epubUri] = uriString
                     prefs[PrefKeys.epubName] = selectedName ?: ""
+                    prefs[PrefKeys.documentType] = detectedType
                 }
             }
         }
@@ -147,22 +159,28 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PDFBoxResourceLoader.init(applicationContext)
         loadAppVersion()
 
         lifecycleScope.launch {
             val prefs = dataStore.data.first()
             selectedUri = prefs[PrefKeys.epubUri]
             selectedName = prefs[PrefKeys.epubName]
+            selectedType = prefs[PrefKeys.documentType]
             ttsRate = prefs[PrefKeys.ttsRate] ?: 1.0f
             ttsPitch = prefs[PrefKeys.ttsPitch] ?: 1.0f
             if (selectedUri != null) {
                 resumeChapterIndex = prefs[PrefKeys.playbackChapterIndex] ?: 0
                 resumeSentenceIndex = prefs[PrefKeys.playbackSentenceIndex] ?: 0
-                loadEpubChapters(
-                    selectedUri!!,
-                    resumeChapterIndex,
-                    resumeSentenceIndex
-                )
+                if (selectedType == "pdf") {
+                    loadPdfDocument(selectedUri!!, resumeSentenceIndex)
+                } else {
+                    loadEpubChapters(
+                        selectedUri!!,
+                        resumeChapterIndex,
+                        resumeSentenceIndex
+                    )
+                }
             }
         }
 
@@ -194,8 +212,10 @@ class MainActivity : ComponentActivity() {
                             ttsService?.stop()
                             stopTtsService()
                         },
-                        onImportEpub = {
-                            pickEpub.launch(arrayOf("application/epub+zip"))
+                        onImportDocument = {
+                            pickDocument.launch(
+                                arrayOf("application/epub+zip", "application/pdf")
+                            )
                         },
                         selectedUri = selectedUri,
                         selectedName = selectedName,
@@ -207,7 +227,11 @@ class MainActivity : ComponentActivity() {
                         onLoadChapter = { index ->
                             val uri = selectedUri
                             if (uri != null) {
-                                loadChapterAtIndex(uri, chapterFiles, index)
+                                if (selectedType == "pdf") {
+                                    loadPdfDocument(uri, currentSentenceIndex)
+                                } else {
+                                    loadChapterAtIndex(uri, chapterFiles, index)
+                                }
                             }
                         },
                         resumeChapterIndex = resumeChapterIndex,
@@ -215,12 +239,16 @@ class MainActivity : ComponentActivity() {
                         onResume = {
                             val uri = selectedUri
                             if (uri != null) {
-                                loadChapterAtIndex(
-                                    uri,
-                                    chapterFiles,
-                                    resumeChapterIndex,
-                                    resumeSentenceIndex
-                                )
+                                if (selectedType == "pdf") {
+                                    loadPdfDocument(uri, resumeSentenceIndex)
+                                } else {
+                                    loadChapterAtIndex(
+                                        uri,
+                                        chapterFiles,
+                                        resumeChapterIndex,
+                                        resumeSentenceIndex
+                                    )
+                                }
                             }
                         },
                         onBackToStart = {
@@ -353,6 +381,18 @@ class MainActivity : ComponentActivity() {
         return null
     }
 
+    private fun detectDocumentType(uri: android.net.Uri): String {
+        val mime = contentResolver.getType(uri)
+        return when {
+            mime == "application/pdf" -> "pdf"
+            mime == "application/epub+zip" -> "epub"
+            else -> {
+                val name = getDisplayName(uri.toString())?.lowercase(Locale.US).orEmpty()
+                if (name.endsWith(".pdf")) "pdf" else "epub"
+            }
+        }
+    }
+
     private fun loadEpubChapters(
         uriString: String,
         resumeChapterIndex: Int,
@@ -427,6 +467,35 @@ class MainActivity : ComponentActivity() {
             }
             currentSentenceIndex = resumeSentenceIndex
         }
+    }
+
+    private fun loadPdfDocument(uriString: String, resumeSentenceIndex: Int) {
+        lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                extractTextFromPdf(uriString)
+            }
+            val title = selectedName?.takeIf { it.isNotBlank() } ?: "PDF Document"
+            chapterFiles = listOf("pdf")
+            chapterTitles = listOf(title)
+            chapterSource = "pdf"
+            coverBitmap = null
+            chapterText = if (text.isBlank()) "No readable text found" else text
+            currentChapterIndex = 0
+            currentSentenceIndex = resumeSentenceIndex
+            savePlaybackState(currentChapterIndex, currentSentenceIndex)
+        }
+    }
+
+    private fun extractTextFromPdf(uriString: String): String {
+        val uri = android.net.Uri.parse(uriString)
+        contentResolver.openInputStream(uri)?.use { input ->
+            PDDocument.load(input).use { doc ->
+                val stripper = PDFTextStripper()
+                val raw = stripper.getText(doc)
+                return raw.replace(Regex("\\s+"), " ").trim()
+            }
+        }
+        return ""
     }
 
     private fun saveTtsSettings(rate: Float, pitch: Float) {
@@ -771,7 +840,7 @@ fun TtsScreen(
     currentSentenceIndex: Int,
     onSentenceIndexChange: (Int) -> Unit,
     onPause: () -> Unit,
-    onImportEpub: () -> Unit,
+    onImportDocument: () -> Unit,
     selectedUri: String?,
     selectedName: String?,
     chapterTitles: List<String>,
@@ -986,10 +1055,11 @@ fun TtsScreen(
                             contentScale = ContentScale.Fit
                         )
                     }
-                    Button(onClick = onImportEpub) {
-                        Text("Import EPUB")
+                    Button(onClick = onImportDocument) {
+                        Text("Import EPUB or PDF")
                     }
-                    val nameText = selectedName?.takeIf { it.isNotBlank() } ?: "No EPUB selected"
+                    val nameText =
+                        selectedName?.takeIf { it.isNotBlank() } ?: "No book selected"
                     Text(
                         text = nameText,
                         style = MaterialTheme.typography.bodyMedium
@@ -1111,7 +1181,7 @@ fun TtsScreen(
                     }
                 }
 
-                val nameText = selectedName?.takeIf { it.isNotBlank() } ?: "No EPUB selected"
+                val nameText = selectedName?.takeIf { it.isNotBlank() } ?: "No book selected"
                 Text(
                     text = nameText,
                     style = MaterialTheme.typography.bodyMedium
