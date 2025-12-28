@@ -1,7 +1,7 @@
 <img width="1536" height="1024" alt="Logo and Text - Vertical white blue" src="https://github.com/user-attachments/assets/8f76a359-1132-477b-9d65-67c2491238c9" />
 # Read My Book
 
-Version: 0.4.1
+Version: 0.4.2
 
 Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 
@@ -15,6 +15,11 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 <img width="418" height="884" alt="Screenshot 2025-12-28 at 09 25 13" src="https://github.com/user-attachments/assets/5bfbaee3-43ff-4179-b126-7a162305f38d" /> <img width="418" height="884" alt="Screenshot 2025-12-28 at 09 24 53" src="https://github.com/user-attachments/assets/e7a16cf2-4b42-43ff-962b-7bf9764e1746" />
 
 ## Version History
+### 0.4.2
+- Improve TTS pacing on slow devices (sentence-by-sentence queueing, smarter splits)
+- Reduce memory use by storing sentence lists for playback/preview
+- Fix adaptive icon sizing and rendering across launchers
+
 ### 0.4.1
 - Update app name, icon, and start screen logo
 

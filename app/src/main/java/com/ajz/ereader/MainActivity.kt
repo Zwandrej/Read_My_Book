@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
     private var chapterSource: String by mutableStateOf("unknown")
     private var chapterFiles: List<String> by
     mutableStateOf(emptyList())
-    private var chapterText: String by mutableStateOf("")
+    private var chapterSentences: List<String> by mutableStateOf(emptyList())
     private var resumeChapterIndex: Int by mutableStateOf(0)
     private var resumeSentenceIndex: Int by mutableStateOf(0)
     private var currentChapterIndex: Int by mutableStateOf(0)
@@ -223,7 +223,7 @@ class MainActivity : ComponentActivity() {
                         chapterTitles = chapterTitles,
                         chapterFiles = chapterFiles,
                         chapterSource = chapterSource,
-                        chapterText = chapterText,
+                        chapterSentences = chapterSentences,
                         currentChapterIndex = currentChapterIndex,
                         onLoadChapter = { index ->
                             val uri = selectedUri
@@ -255,7 +255,7 @@ class MainActivity : ComponentActivity() {
                         onBackToStart = {
                             ttsService?.stop()
                             stopTtsService()
-                            chapterText = ""
+                            chapterSentences = emptyList()
                         },
                         rate = ttsRate,
                         pitch = ttsPitch,
@@ -461,6 +461,7 @@ class MainActivity : ComponentActivity() {
             chapterTitles = result.third
             chapterSource = result.second
             coverBitmap = cover
+            chapterSentences = emptyList()
             currentChapterIndex = if (result.first.isNotEmpty()) {
                 resumeChapterIndex.coerceIn(0, result.first.lastIndex)
             } else {
@@ -480,7 +481,9 @@ class MainActivity : ComponentActivity() {
             chapterTitles = listOf(title)
             chapterSource = "pdf"
             coverBitmap = null
-            chapterText = if (text.isBlank()) "No readable text found" else text
+            chapterSentences = splitSentences(
+                if (text.isBlank()) "No readable text found" else text
+            )
             currentChapterIndex = 0
             currentSentenceIndex = resumeSentenceIndex
             savePlaybackState(currentChapterIndex, currentSentenceIndex)
@@ -546,7 +549,9 @@ class MainActivity : ComponentActivity() {
                 val html = bytes.toString(Charsets.UTF_8)
                 extractTextFromHtml(html)
             }
-            chapterText = if (text.isBlank()) "No readable text found" else text
+            chapterSentences = splitSentences(
+                if (text.isBlank()) "No readable text found" else text
+            )
             currentChapterIndex = index
             currentSentenceIndex = sentenceIndex
             savePlaybackState(currentChapterIndex, currentSentenceIndex)
@@ -669,6 +674,13 @@ class MainActivity : ComponentActivity() {
         return noFootnotes
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    private fun splitSentences(input: String): List<String> {
+        return input
+            .split(Regex("(?<=[.!?])\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
     }
 
     private fun parseTocTitles(
@@ -846,7 +858,7 @@ fun TtsScreen(
     selectedName: String?,
     chapterTitles: List<String>,
     chapterFiles: List<String>,
-    chapterText: String,
+    chapterSentences: List<String>,
     currentChapterIndex: Int,
     onLoadChapter: (Int) -> Unit,
     resumeChapterIndex: Int,
@@ -865,22 +877,12 @@ fun TtsScreen(
     aboutVersionHistory: List<String>,
     coverBitmap: Bitmap?
 ) {
-    var text by remember(chapterText) {
-        mutableStateOf(if (chapterText.isBlank()) "No readable text found" else chapterText)
-    }
     var pendingRate by remember(rate) { mutableStateOf(rate) }
     var pendingPitch by remember(pitch) { mutableStateOf(pitch) }
     var showChapterList by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
-    val showStartScreen = chapterText.isBlank()
-
-    fun splitSentences(input: String): List<String> {
-        return input
-            .split(Regex("(?<=[.!?])\\s+"))
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-    }
+    val showStartScreen = chapterSentences.isEmpty()
 
     fun buildSentencePreview(sentences: List<String>, index: Int): String {
         if (sentences.isEmpty()) return ""
@@ -894,7 +896,7 @@ fun TtsScreen(
         return lines.joinToString("\n\n")
     }
 
-    val sentences = splitSentences(text)
+    val sentences = chapterSentences
     if (sentences.isNotEmpty() && currentSentenceIndex >= sentences.size) {
         onSentenceIndexChange(0)
     }
