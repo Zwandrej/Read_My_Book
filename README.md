@@ -12,8 +12,7 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - Text-to-Speech reading with sentence preview and controls
 - Resume position (chapter + sentence index)
 
-<img width="418" height="884" alt="Screenshot 2025-12-28 at 09 24 53" src="https://github.com/user-attachments/assets/e7a16cf2-4b42-43ff-962b-7bf9764e1746" /> <img width="418" height="884" alt="Screenshot 2025-12-28 at 09 25 13" src="https://github.com/user-attachments/assets/5bfbaee3-43ff-4179-b126-7a162305f38d" />
-
+<img width="418" height="884" alt="Screenshot 2025-12-28 at 09 25 13" src="https://github.com/user-attachments/assets/5bfbaee3-43ff-4179-b126-7a162305f38d" /> <img width="418" height="884" alt="Screenshot 2025-12-28 at 09 24 53" src="https://github.com/user-attachments/assets/e7a16cf2-4b42-43ff-962b-7bf9764e1746" />
 
 ## Version History
 ### 0.4.1
