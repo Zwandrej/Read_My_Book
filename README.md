@@ -56,9 +56,9 @@ Offline EPUB reader with Text-to-Speech for Android (Boox friendly).
 - "Now Reading" header with chapter title
 - Export/import reading state (backup)
 
-## Extensibility
+## Future Extensibility
 - Swapping TTS backends (local vs API)
-- Future formats (PDF, Markdown, HTML)
+- Future formats (~~PDF~~, Markdown, HTML)
 - Text-to-audio quality improvements
 - Smarter chunking (sentence/paragraph aware, not raw length)
 - Optional normalization (footnotes, references, page numbers)
