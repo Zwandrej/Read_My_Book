@@ -20,6 +20,8 @@ This must work well on e-ink devices (Boox): minimal UI animations, stable backg
 - Milestone 4: in progress (EPUB zip scan works; OPF spine parsing still falling back)
 - Milestone 6: complete (foreground service playback for background TTS)
 - Book cover display: complete (shown on start and reading screens)
+- PDF import + TTS: complete (single-chapter PDF text extraction)
+- Branding: complete (app name "Read My Book", updated launcher icon, start screen logo)
 
 ## Open Issues
 - App icon still shows default Android icon on device

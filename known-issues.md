@@ -8,3 +8,8 @@
 
 - Cloud storage files (e.g., Drive/Dropbox) can cause a crash on app restart.
   - Current workaround: open only local files via Storage Access Framework.
+
+## Likely Resolved (keep an eye on these)
+
+- 2025-01-12 — OPF spine parsing fallback not reproducing; currently shows source "spine" in tests.
+  - Keep in mind if "Source: fallback" shows up again.
